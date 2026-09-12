@@ -1,0 +1,5 @@
+sure
+*.exe
+dist/
+*.test
+.env
