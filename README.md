@@ -2,37 +2,40 @@
 
 > **Your terminal's second opinion**
 
-`sure` is an AI-powered CLI tool that intercepts terminal commands before they execute, analyzes them for potential destructive behavior, mistakes, or dangerous typos, and asks for confirmation before letting you proceed. It's like having a senior engineer looking over your shoulder before you hit Enter on that `rm -rf` command.
+`sure` is an AI-powered CLI utility that intercepts terminal commands before they execute, analyzes them for potential destructive behavior, mistakes, or dangerous typos, and asks for confirmation before letting you proceed.
+
+**The most important rule:** `sure` NEVER automatically modifies, corrects, replaces, or rewrites the user's command. It only asks whether you want to proceed.
+
+---
 
 ## 🚀 Quick Install
 
-### Homebrew (macOS/Linux)
+### Homebrew (macOS / Linux)
+
 ```bash
-brew tap sidx1/homebrew-tap
+brew tap sidx1-scratch/homebrew-tap
 brew install sure
 ```
 
-### Go Install
-```bash
-go install github.com/sidx1/sure@latest
-```
-
 ### From Source
+
 ```bash
-git clone https://github.com/sidx1/sure.git
+git clone https://github.com/sidx1-scratch/sure.git
 cd sure
 make install
 ```
 
+---
+
 ## 🛠️ Setup Instructions
 
-1. Run the interactive setup command:
+1. **Run the interactive setup wizard:**
    ```bash
    sure setup
    ```
-   This will prompt you for your API key and configure default models.
+   This displays a clean TUI box wizard asking for your Gemini API key (stored securely in the OS keyring).
 
-2. Add shell integration. Add the appropriate line to your shell configuration file:
+2. **Add shell integration to your profile:**
 
    **Bash (`~/.bashrc`):**
    ```bash
@@ -40,106 +43,123 @@ make install
    ```
 
    **Zsh (`~/.zshrc`):**
-   ```zsh
+   ```bash
    eval "$(sure shell-init --shell zsh)"
    ```
 
-3. Restart your shell or run `source ~/.bashrc` (or `~/.zshrc`).
+3. **Restart your shell:**
+   ```bash
+   exec $SHELL
+   ```
 
-## 💡 Usage Examples
+---
 
-When you type a potentially dangerous command, `sure` intercepts it:
+## 💡 Warning Examples
 
-```bash
-$ rm -rf /etc/nginx/conf.d
-✋ Warning: This command will recursively delete Nginx configuration files without prompting.
-Are you sure you want to proceed? [y/N]: N
-Command aborted.
+When a warning is necessary, `sure` provides a concise explanation of **what could happen and why**:
+
+```text
+⚠ This command may be destructive.
+
+Command:
+  rm -rf ~/Downloads/*
+
+Why:
+  This recursively deletes everything inside your Downloads
+  folder without asking for confirmation.
+
+Do you want to proceed?
+
+[Y] Yes   [N] No
 ```
 
-Or for a potentially destructive git command:
+For a suspected typo:
 
-```bash
-$ git push origin master --force
-✋ Warning: You are forcefully pushing to the master branch. This will overwrite remote history and may break the repository for other collaborators.
-Are you sure you want to proceed? [y/N]: N
-Command aborted.
+```text
+⚠ I think you may have typed this command incorrectly.
+
+Command:
+  git chekcout main
+
+Why:
+  `chekcout` does not appear to be a valid Git subcommand.
+
+Do you want to proceed?
+
+[Y] Yes   [N] No
 ```
+
+If you select **Yes**, `sure` executes the **EXACT original command**.
+If you select **No**, it cancels execution and returns directly to the shell.
+
+---
 
 ## ⚙️ Configuration
 
-You can manually edit the configuration file located at `~/.config/sure/config.yaml`:
+Configuration is stored at `~/.config/sure/config.yaml`:
 
 ```yaml
-provider: anthropic
-api_key: sk-ant-api03...
-model: claude-3-5-haiku-20241022
-temperature: 0.1
-auto_allow: true      # Automatically allow commands that are deemed safe
-exclude:              # Commands to skip analysis for (Regex)
-  - "^ls"
-  - "^git status"
+provider: gemini
+model: gemini-2.0-flash
+sensitivity: medium      # low, medium, high
+enabled: true
+analyze_pipelines: true
+excluded_commands:
+  - cd
+  - ls
+  - pwd
+  - echo
+always_confirm:
+  - rm -rf /
+  - mkfs
 ```
 
-## 📖 Commands Reference
-
-- `sure setup`: Interactive setup for API keys and configuration.
-- `sure status`: Check if shell integration is active and check configuration status.
-- `sure config`: Manage configuration options (e.g., `sure config set provider openai`).
-- `sure scan <script.sh>`: Analyze a shell script file for potential issues without running it.
-- `sure doctor`: Verify installation, connectivity, and shell hooks.
-- `sure shell-init --shell [bash|zsh]`: Output the shell initialization script.
-
-## 🔌 Temporarily Disabling
-
-If you want to temporarily disable `sure` without removing it from your config:
+### CLI Config Commands
 
 ```bash
-sure_disable
+sure status                    # Inspect provider, key status, cache, & shell hook
+sure config show               # View current YAML settings
+sure config set sensitivity high # Change setting
+sure config reset              # Reset to default configuration
+sure scan                      # Discover and cache local CLI documentation
+sure doctor                    # Diagnose environment, API key, and connectivity
 ```
 
-To re-enable:
+### Temporarily Disabling
+
+Temporarily toggle interception directly in your active shell session:
 
 ```bash
-sure_enable
+sure_disable   # Interception paused
+sure_enable    # Interception resumed
 ```
 
-Alternatively, you can set the environment variable `SURE_DISABLED=1` for a single command or session.
+---
 
 ## 🏗️ Architecture & How It Works
 
-`sure` uses shell pre-execution hooks to intercept commands before they are sent to the operating system. 
-
+```text
+User enters command
+        ↓
+Shell Hook (Bash DEBUG extdebug / Zsh preexec)
+        ↓
+sure analyze --command "..."
+        ↓
+Command Parser & Tokenizer
+        ↓
+CLI Documentation Discovery & Cache (~/.cache/sure/docs)
+        ↓
+AI Analysis (Gemini API with structured JSON output)
+        ↓
+Warning + Explanation (if issue detected)
+        ↓
+User choice [Y/N]
+        ↓
+Original unmodified command executed by Shell
 ```
-User types command -> Shell preexec hook -> `sure analyze` -> AI Model Evaluation
-                                                                    |
-    +---------------------------------------------------------------+
-    |
-    v
-Safe? -> Yes -> Shell executes command
-    |
-    v
- No -> Prompt User -> User confirms -> Shell executes command
-                   |
-                   v
-              User denies -> Command aborted
-```
 
-- **Bash**: Uses the `DEBUG` trap with `shopt -s extdebug`.
-- **Zsh**: Uses the built-in `add-zsh-hook preexec`.
-
-When a command is intercepted, `sure` checks local rules. If the command isn't trivially safe (like `cd` or `echo`), it sends the command to an LLM via your configured provider to assess its potential impact.
-
-## 🧘 Design Philosophy
-
-1. **Fast by default**: Shells need to be snappy. `sure` uses fast models (like Claude 3.5 Haiku or GPT-4o-mini) and avoids calling the API for harmless commands.
-2. **Fail open**: If the API is down or there's a timeout, `sure` defaults to warning you but letting the command through, rather than locking you out of your terminal.
-3. **Unobtrusive**: `sure` aims to be invisible until you're about to make a mistake.
-
-## 🤝 Contributing
-
-Contributions are welcome! Please open an issue or submit a Pull Request on the GitHub repository.
+---
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT License — see [LICENSE](LICENSE) for details.

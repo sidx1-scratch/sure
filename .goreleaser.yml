@@ -30,7 +30,7 @@ changelog:
       - '^test:'
 brews:
   - repository:
-      owner: sidx1
+      owner: sidx1-scratch
       name: homebrew-tap
     homepage: "https://github.com/sidx1/sure"
     description: "Your terminal's second opinion - AI-powered command safety analysis"
