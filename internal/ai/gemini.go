@@ -20,7 +20,8 @@ type GeminiProvider struct {
 
 func NewGeminiProvider() *GeminiProvider {
 	cfg, err := config.Load()
-	model := "gemini-2.0-flash"
+	// Default to gemini-2.5-flash which is free-tier eligible on Google AI Studio
+	model := "gemini-2.5-flash"
 	if err == nil && cfg.Model != "" {
 		model = cfg.Model
 	}
@@ -32,7 +33,7 @@ func (p *GeminiProvider) Name() string {
 }
 
 type geminiRequest struct {
-	Contents         []geminiContent `json:"contents"`
+	Contents          []geminiContent `json:"contents"`
 	SystemInstruction *geminiContent  `json:"systemInstruction,omitempty"`
 	GenerationConfig  geminiConfig    `json:"generationConfig"`
 }
@@ -63,7 +64,7 @@ type geminiResponse struct {
 func (p *GeminiProvider) Analyze(ctx context.Context, req AnalysisRequest) (*AnalysisResult, error) {
 	apiKey, err := keyring.GetAPIKey("gemini")
 	if err != nil {
-		return nil, fmt.Errorf("gemini api key not found: %w", err)
+		return nil, fmt.Errorf("gemini api key not found (run 'sure setup'): %w", err)
 	}
 
 	systemPrompt := `You are a terminal command safety analyzer. Your ONLY job is to analyze shell commands and report potential issues.
@@ -98,8 +99,8 @@ Example good reason: "'-R' makes the permission change recursive, and '/' target
 Example bad reason: "This command is dangerous."
 
 If warn is false, reason can be empty.`
-	
-	prompt := fmt.Sprintf("Command: %s\nWorking Dir: %s\nShell: %s\nCommand Doc: %s\n", 
+
+	prompt := fmt.Sprintf("Command: %s\nWorking Dir: %s\nShell: %s\nCommand Doc: %s\n",
 		req.Command, req.WorkingDir, req.Shell, req.CommandDoc)
 
 	geminiReq := geminiRequest{
@@ -108,7 +109,7 @@ If warn is false, reason can be empty.`
 		},
 		Contents: []geminiContent{
 			{
-				Role: "user",
+				Role:  "user",
 				Parts: []geminiPart{{Text: prompt}},
 			},
 		},
@@ -123,7 +124,7 @@ If warn is false, reason can be empty.`
 	}
 
 	url := fmt.Sprintf("https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent?key=%s", p.model, apiKey)
-	
+
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {
 		return nil, err

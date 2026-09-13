@@ -7,6 +7,7 @@ import (
 	"github.com/sidx1/sure/internal/cache"
 	"github.com/sidx1/sure/internal/config"
 	"github.com/sidx1/sure/internal/keyring"
+	"github.com/sidx1/sure/internal/stats"
 	"github.com/spf13/cobra"
 )
 
@@ -19,21 +20,30 @@ var statusCmd = &cobra.Command{
 			fmt.Printf("Config Error: %v\n", err)
 			return
 		}
-		
-		fmt.Printf("Enabled: %v\n", cfg.Enabled)
-		fmt.Printf("Provider: %s\n", cfg.Provider)
-		
-		_, err = keyring.GetAPIKey(cfg.Provider)
-		if err == nil {
-			fmt.Printf("API Key: Set\n")
+
+		fmt.Printf("Enabled:           %v\n", cfg.Enabled)
+		fmt.Printf("Provider:          %s (Model: %s)\n", cfg.Provider, cfg.Model)
+		if cfg.Provider == "local" || cfg.Provider == "ollama" {
+			fmt.Printf("Local Endpoint:    %s\n", cfg.Local.Endpoint)
 		} else {
-			fmt.Printf("API Key: Not set (%v)\n", err)
+			_, err = keyring.GetAPIKey(cfg.Provider)
+			if err == nil {
+				fmt.Printf("API Key:           Set\n")
+			} else {
+				fmt.Printf("API Key:           Not set (%v)\n", err)
+			}
 		}
-		
+
 		size, _ := cache.Size()
-		fmt.Printf("Cached Commands: %d\n", size)
-		fmt.Printf("Config File: %s\n", config.ConfigDir()+"/config.yaml")
-		
+		fmt.Printf("Cached Commands:   %d\n", size)
+
+		summary, err := stats.GetSummary()
+		if err == nil {
+			fmt.Printf("Mistakes Caught:   %d (%.1f%% command accuracy)\n", summary.MistakesCaught, summary.AccuracyScore)
+		}
+
+		fmt.Printf("Config File:       %s/config.yaml\n", config.ConfigDir())
+
 		if os.Getenv("SURE_SKIP") != "" {
 			fmt.Printf("Shell Integration: Active\n")
 		} else {

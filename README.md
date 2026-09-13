@@ -4,7 +4,17 @@
 
 `sure` is an AI-powered CLI utility that intercepts terminal commands before they execute, analyzes them for potential destructive behavior, mistakes, or dangerous typos, and asks for confirmation before letting you proceed.
 
-**The most important rule:** `sure` NEVER automatically modifies, corrects, replaces, or rewrites the user's command. It only asks whether you want to proceed.
+**The core rule:** `sure` NEVER automatically modifies, corrects, replaces, or rewrites the user's command. It only asks whether you want to proceed.
+
+---
+
+## 🌟 What's New in v0.2.0
+
+- 🧩 **Modular Block Architecture:** All core subsystems (`Provider`, `Parser`, `Pipeline`, `Storage`, `UI`, `Tracker`) are cleanly abstracted interfaces ("blocks"). Fork developers can effortlessly swap out any block.
+- 🆓 **Free-Tier Default Model:** Defaults to `gemini-2.5-flash`, which is eligible for the free tier on Google AI Studio without billing surprises.
+- 💻 **Local Model Support:** First-class support for **Ollama**, **LM Studio**, and local OpenAI-compatible endpoints (`llama3.2`, `mistral`, `qwen2.5-coder`) with zero external API calls or fees.
+- 📊 **Mistakes Caught & Accuracy Tracking:** Track every intercepted command, accuracy percentage, and typing skill improvement over time via `sure stats`.
+- 🌐 **Web Dashboard & Showcase Badge:** Launch `sure web` to view an interactive dark-mode dashboard and embed a live SVG badge in your GitHub README / dotfiles repo!
 
 ---
 
@@ -33,7 +43,7 @@ make install
    ```bash
    sure setup
    ```
-   This displays a clean TUI box wizard asking for your Gemini API key (stored securely in the OS keyring).
+   Provide your Gemini API key (free-tier eligible, securely stored in OS keyring) or press Enter if using local models.
 
 2. **Add shell integration to your profile:**
 
@@ -51,6 +61,76 @@ make install
    ```bash
    exec $SHELL
    ```
+
+---
+
+## 💻 Using Local Models (Ollama / LM Studio)
+
+You can run `sure` 100% offline with zero API keys or costs:
+
+```bash
+# Switch provider to local / ollama
+sure config set provider local
+
+# Configure local endpoint (default: http://localhost:11434)
+sure config set local.endpoint http://localhost:11434
+
+# Select model (e.g. llama3.2, mistral, qwen2.5-coder)
+sure config set local.model llama3.2
+```
+
+Verify with:
+```bash
+sure doctor
+```
+
+---
+
+## 📊 Viewing Mistakes Caught & Typing Improvement
+
+Check your command accuracy and typing improvement directly in your terminal:
+
+```bash
+sure stats
+```
+
+Example output:
+```text
+📊 sure — Terminal Command Safety & Typing Improvement
+=======================================================
+Total Commands Analyzed:    142
+🛑 Mistakes Caught:         4 (intercepted & avoided)
+⚠️  Warnings Overridden:     1 (user confirmed Y)
+✨ Safe Commands:           137 (clean execution)
+🎯 Typing Accuracy Score:   97.2%
+📈 Improvement Trend:       improving
+```
+
+Launch the web dashboard:
+```bash
+sure web
+```
+Open **http://localhost:7873** to see mistake history, accuracy trends, and embed your showcase badge:
+```html
+<img src="http://localhost:7873/api/badge" alt="sure safety badge" />
+```
+
+---
+
+## 🧩 Modular Block Architecture (For Fork Developers)
+
+`sure` is built as independent, pluggable "blocks" so open-source contributors can easily swap components without modifying core logic:
+
+| Block Interface | Package | Default Implementation | Swappable For |
+|---|---|---|---|
+| `ai.Provider` | `internal/ai` | `GeminiProvider`, `LocalProvider` | Anthropic, Mistral, custom HTTP API |
+| `parser.Parser` | `internal/parser` | `DefaultParser` (tokenizer) | `tree-sitter-bash`, `mvdan.cc/sh` |
+| `analyzer.Pipeline` | `internal/analyzer` | `DefaultPipeline` | Custom heuristic filters, AST rules |
+| `cache.Storage` | `internal/cache` | `FileStorage` (~/.cache/sure) | SQLite, Redis, BadgerDB |
+| `tui.UI` | `internal/tui` | `TerminalUI` (ANSI Box) | Bubbletea, Gum, Desktop notifications |
+| `stats.Tracker` | `internal/stats` | `FileTracker` (JSONL) | SQLite, InfluxDB, Prometheus |
+
+Each block provides `SetGlobal<Block>()` or `RegisterProvider()` for trivial extension.
 
 ---
 
@@ -73,37 +153,25 @@ Do you want to proceed?
 [Y] Yes   [N] No
 ```
 
-For a suspected typo:
-
-```text
-⚠ I think you may have typed this command incorrectly.
-
-Command:
-  git chekcout main
-
-Why:
-  `chekcout` does not appear to be a valid Git subcommand.
-
-Do you want to proceed?
-
-[Y] Yes   [N] No
-```
-
 If you select **Yes**, `sure` executes the **EXACT original command**.
-If you select **No**, it cancels execution and returns directly to the shell.
+If you select **No**, it cancels execution and records a caught mistake in your accuracy stats.
 
 ---
 
-## ⚙️ Configuration
+## ⚙️ Configuration Reference
 
-Configuration is stored at `~/.config/sure/config.yaml`:
+Stored at `~/.config/sure/config.yaml`:
 
 ```yaml
-provider: gemini
-model: gemini-2.0-flash
-sensitivity: medium      # low, medium, high
+provider: gemini         # "gemini", "local", "ollama", "openai"
+model: gemini-2.5-flash  # Free-tier eligible on Google AI Studio
+sensitivity: medium      # "low", "medium", "high"
 enabled: true
 analyze_pipelines: true
+local:
+  endpoint: http://localhost:11434
+  model: llama3.2
+web_port: 7873
 excluded_commands:
   - cd
   - ls
@@ -112,50 +180,6 @@ excluded_commands:
 always_confirm:
   - rm -rf /
   - mkfs
-```
-
-### CLI Config Commands
-
-```bash
-sure status                    # Inspect provider, key status, cache, & shell hook
-sure config show               # View current YAML settings
-sure config set sensitivity high # Change setting
-sure config reset              # Reset to default configuration
-sure scan                      # Discover and cache local CLI documentation
-sure doctor                    # Diagnose environment, API key, and connectivity
-```
-
-### Temporarily Disabling
-
-Temporarily toggle interception directly in your active shell session:
-
-```bash
-sure_disable   # Interception paused
-sure_enable    # Interception resumed
-```
-
----
-
-## 🏗️ Architecture & How It Works
-
-```text
-User enters command
-        ↓
-Shell Hook (Bash DEBUG extdebug / Zsh preexec)
-        ↓
-sure analyze --command "..."
-        ↓
-Command Parser & Tokenizer
-        ↓
-CLI Documentation Discovery & Cache (~/.cache/sure/docs)
-        ↓
-AI Analysis (Gemini API with structured JSON output)
-        ↓
-Warning + Explanation (if issue detected)
-        ↓
-User choice [Y/N]
-        ↓
-Original unmodified command executed by Shell
 ```
 
 ---

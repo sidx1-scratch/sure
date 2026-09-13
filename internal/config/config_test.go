@@ -20,8 +20,8 @@ func TestDefaultConfig(t *testing.T) {
 	if !cfg.AnalyzePipelines {
 		t.Error("expected analyze_pipelines to be true by default")
 	}
-	if cfg.Model != "gemini-2.0-flash" {
-		t.Errorf("expected default model 'gemini-2.0-flash', got '%s'", cfg.Model)
+	if cfg.Model != "gemini-2.5-flash" {
+		t.Errorf("expected default model 'gemini-2.5-flash', got '%s'", cfg.Model)
 	}
 }
 

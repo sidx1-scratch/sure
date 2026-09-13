@@ -11,7 +11,20 @@ import (
 	"github.com/sidx1/sure/internal/parser"
 )
 
-func Analyze(command string) (*ai.AnalysisResult, error) {
+// Pipeline defines the pluggable analysis pipeline block.
+// Forks and developers can implement custom validation filters,
+// heuristic pre-checks, offline rule engines, or multi-model ensembles.
+type Pipeline interface {
+	Analyze(ctx context.Context, command string) (*ai.AnalysisResult, error)
+}
+
+type DefaultPipeline struct{}
+
+func NewDefaultPipeline() *DefaultPipeline {
+	return &DefaultPipeline{}
+}
+
+func (p *DefaultPipeline) Analyze(ctx context.Context, command string) (*ai.AnalysisResult, error) {
 	cfg, err := config.Load()
 	if err != nil {
 		return nil, fmt.Errorf("failed to load config: %w", err)
@@ -59,7 +72,7 @@ func Analyze(command string) (*ai.AnalysisResult, error) {
 		Shell:      shell,
 	}
 
-	res, err := provider.Analyze(context.Background(), req)
+	res, err := provider.Analyze(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -73,4 +86,16 @@ func Analyze(command string) (*ai.AnalysisResult, error) {
 	}
 
 	return res, nil
+}
+
+var globalPipeline Pipeline = NewDefaultPipeline()
+
+func SetGlobalPipeline(p Pipeline) {
+	if p != nil {
+		globalPipeline = p
+	}
+}
+
+func Analyze(command string) (*ai.AnalysisResult, error) {
+	return globalPipeline.Analyze(context.Background(), command)
 }

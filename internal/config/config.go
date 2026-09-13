@@ -8,15 +8,22 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+type LocalModelConfig struct {
+	Endpoint string `yaml:"endpoint"` // e.g. http://localhost:11434/v1 for Ollama, http://localhost:1234/v1 for LM Studio
+	Model    string `yaml:"model"`    // e.g. llama3.2, mistral, qwen2.5-coder, etc.
+}
+
 type Config struct {
-	Provider         string   `yaml:"provider"`
-	Sensitivity      string   `yaml:"sensitivity"`
-	ExcludedCommands []string `yaml:"excluded_commands"`
-	AlwaysConfirm    []string `yaml:"always_confirm"`
-	AnalyzePipelines bool     `yaml:"analyze_pipelines"`
-	CacheDir         string   `yaml:"cache_dir"`
-	Enabled          bool     `yaml:"enabled"`
-	Model            string   `yaml:"model"`
+	Provider         string           `yaml:"provider"`           // "gemini", "ollama", "local", "openai"
+	Sensitivity      string           `yaml:"sensitivity"`        // "low", "medium", "high"
+	ExcludedCommands []string         `yaml:"excluded_commands"`  // commands to skip
+	AlwaysConfirm    []string         `yaml:"always_confirm"`     // always warn
+	AnalyzePipelines bool             `yaml:"analyze_pipelines"`  // default true
+	CacheDir         string           `yaml:"cache_dir"`          // default ~/.cache/sure
+	Enabled          bool             `yaml:"enabled"`            // default true
+	Model            string           `yaml:"model"`              // default "gemini-2.5-flash" (free-tier eligible)
+	Local            LocalModelConfig `yaml:"local"`              // Local model settings (Ollama / OpenAI-compatible)
+	WebPort          int              `yaml:"web_port"`           // Web dashboard port (default 7873)
 }
 
 func DefaultConfig() *Config {
@@ -28,7 +35,12 @@ func DefaultConfig() *Config {
 		AnalyzePipelines: true,
 		CacheDir:         CacheDir(),
 		Enabled:          true,
-		Model:            "gemini-2.0-flash",
+		Model:            "gemini-2.5-flash", // Free tier eligible on Google AI Studio
+		Local: LocalModelConfig{
+			Endpoint: "http://localhost:11434",
+			Model:    "llama3.2",
+		},
+		WebPort: 7873,
 	}
 }
 
@@ -46,6 +58,14 @@ func CacheDir() string {
 		return "/tmp/.cache/sure"
 	}
 	return filepath.Join(home, ".cache", "sure")
+}
+
+func DataDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "/tmp/.local/share/sure"
+	}
+	return filepath.Join(home, ".local", "share", "sure")
 }
 
 func Load() (*Config, error) {
